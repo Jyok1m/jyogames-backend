@@ -8,11 +8,11 @@ const userSchema = new mongoose.Schema(
 		friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "users", default: [] }],
 		games: [{ type: mongoose.Schema.Types.ObjectId, ref: "games", default: [] }],
 		lastLogin: { type: Date, default: null },
-		nickname: { type: String, required: true },
 		password: { type: String, required: true },
 		role: { type: String, default: "user" }, // admin, user
 		status: { type: String, default: "inactive" }, // active, inactive, banned
 		uid: { type: String, required: true }, // token
+		username: { type: String, required: true },
 	},
 	{ timestamps: true }
 );
