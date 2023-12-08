@@ -16,7 +16,7 @@ var cors = require("cors"); // Lign after var app = express();
 var corsOptions = {
 	origin: function (origin, callback) {
 		// Replace 'allowedOrigins' with your specific origins for production
-		const allowedOrigins = ["http://localhost:4000", "http://localhost:4001", "https://www.jyogames.app"];
+		const allowedOrigins = ["http://localhost:4000", process.env.FRONTEND_URL];
 		if (allowedOrigins.includes(origin) || !origin) {
 			callback(null, true);
 		} else {
