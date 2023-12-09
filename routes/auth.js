@@ -33,9 +33,14 @@ router.post(
 			const { username, email, password } = req.body;
 
 			// Vérif user
-			const existingUser = await db.users.findOne({ email: email });
-			if (existingUser) {
-				return res.status(409).json({ error: "User already exists" });
+			const emailExists = await db.users.findOne({ email });
+			if (emailExists) {
+				return res.status(409).json({ error: "Email already exists", field: "email" });
+			}
+
+			const usernameExists = await db.users.findOne({ username });
+			if (usernameExists) {
+				return res.status(409).json({ error: "Username already exists", field: "username" });
 			}
 
 			const salt = await bcrypt.genSalt(10);
@@ -46,7 +51,7 @@ router.post(
 
 			await newUser.save();
 
-			res.sendStatus(201);
+			res.status(201).json({ message: "User created" });
 		} catch (error) {
 			console.error(error);
 			return res.status(500).json({ error: error.message });
@@ -58,50 +63,38 @@ router.post(
 /*                           POST: /sign-in                          */
 /* ---------------------------------------------------------------- */
 
-router.post(
-	"/sign-in",
-	body("email").if(body("email").notEmpty()).isEmail().trim().escape(),
-	body("username").if(body("username").notEmpty()).trim().escape(),
-	oneOf([body("email").notEmpty(), body("username").notEmpty()]),
-	body("password")
-		.notEmpty()
-		.trim()
-		.escape()
-		.isLength({ min: 8 })
-		.matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/),
-	async function (req, res) {
-		if (!validationResult(req).isEmpty()) {
-			console.error({ errors: validationResult(req).array() });
-			return res.status(400).json({ error: "Invalid field(s)." });
-		}
-
-		try {
-			const { email, username, password } = req.body;
-
-			// Vérif user
-			const existingUser = await db.users.findOne({ $or: [{ email }, { username }] });
-			if (!existingUser) {
-				return res.status(404).json({ error: "User not found." });
-			}
-
-			// Vérif password
-			const isPasswordValid = await bcrypt.compare(password, existingUser.password);
-			if (!isPasswordValid) {
-				return res.status(401).json({ error: "Incorrect password." });
-			}
-
-			// Reset token
-			const uid = uid2(32);
-
-			await existingUser.updateOne({ $set: { uid, status: "active", lastLogin: dayjs() } });
-
-			res.status(200).json({ uid });
-		} catch (error) {
-			console.error(error);
-			return res.status(500).json({ error: error.message });
-		}
+router.post("/sign-in", body(["emailOrUsername", "password"]).notEmpty().trim().escape(), async function (req, res) {
+	if (!validationResult(req).isEmpty()) {
+		console.error({ errors: validationResult(req).array() });
+		return res.status(400).json({ error: "Invalid field(s)." });
 	}
-);
+
+	try {
+		const { emailOrUsername, password } = req.body;
+
+		// Vérif user
+		const existingUser = await db.users.findOne({ $or: [{ email: emailOrUsername }, { username: emailOrUsername }] });
+		if (!existingUser) {
+			return res.status(404).json({ error: "User not found." });
+		}
+
+		// Vérif password
+		const isPasswordValid = await bcrypt.compare(password, existingUser.password);
+		if (!isPasswordValid) {
+			return res.status(401).json({ error: "Incorrect password." });
+		}
+
+		// Reset token
+		const uid = uid2(32);
+
+		await existingUser.updateOne({ $set: { uid, status: "active", lastLogin: dayjs() } });
+
+		res.status(200).json({ uid });
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ error: error.message });
+	}
+});
 
 /* ---------------------------------------------------------------- */
 /*                          POST: /sign-out                         */
@@ -126,7 +119,7 @@ router.post("/sign-out", body("uid").notEmpty().isLength(32).escape(), async fun
 		}
 
 		await existingUser.updateOne({ status: "inactive" });
-		res.sendStatus(200);
+		res.status(200).json({ message: "User signed out." });
 	} catch (error) {
 		console.error(error);
 		return res.status(500).json({ error: error.message });
@@ -270,7 +263,7 @@ router.patch(
 				await db.resetTokens.deleteOne({ token: resetToken });
 			}
 
-			res.sendStatus(200);
+			res.status(200).json({ message: "Password reset successfully." });
 		} catch (error) {
 			console.error(error);
 			return res.status(500).json({ error: error.message });
