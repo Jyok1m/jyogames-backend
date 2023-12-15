@@ -14,7 +14,7 @@ router.post("/new-game", async function (req, res) {
 		const initialCardPool = await db.memoryCards.generateCards();
 		const createdGame = await db.memoryGames.createGame(uids, initialCardPool);
 
-		res.json({ message: "Game created", game: createdGame });
+		res.json({ message: "Game created", newGame: createdGame });
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ error: "Internal Server Error" });

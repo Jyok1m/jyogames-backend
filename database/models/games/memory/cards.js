@@ -31,6 +31,7 @@ cardSchema.statics.generateCards = async function () {
 	const finalCardPool = shuffledCardPool.map((card, index) => {
 		return {
 			cardId: card._id,
+			url: card.url,
 			position: index + 1,
 		};
 	});

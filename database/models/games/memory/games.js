@@ -12,6 +12,7 @@ const poolSchema = new mongoose.Schema({
 	cards: [
 		{
 			cardId: { type: mongoose.Schema.Types.ObjectId, ref: "memory_cards" },
+			url: { type: String },
 			position: { type: Number },
 		},
 	],
@@ -42,7 +43,10 @@ const gameSchema = new mongoose.Schema(
 /* ---------------------------------------------------------------- */
 
 gameSchema.statics.createGame = async function (uids, initialPool) {
-	const players = uids.map((uid) => new ObjectId(uid));
+	const users = await mongoose.models.users.find({ uid: { $in: uids } }).select("_id");
+	const players = users.map((user) => {
+		return user._id;
+	});
 	const game = await this.create({ players, initialPool: { cards: [...initialPool] } });
 	return game;
 };
