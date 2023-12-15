@@ -1,4 +1,6 @@
 const db = {
+	memoryCards: require("./models/games/memory/cards"),
+	memoryGames: require("./models/games/memory/games"),
 	users: require("./models/users"),
 	resetTokens: require("./models/resetTokens"),
 };
