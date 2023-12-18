@@ -11,8 +11,8 @@ const { getCloudFolderContent } = require("../modules/cloudinary.js");
 router.post("/new-game", async function (req, res) {
 	const { uids } = req.body;
 	try {
-		const initialCardPool = await db.memoryCards.generateCards();
-		const createdGame = await db.memoryGames.createGame(uids, initialCardPool);
+		const cardPool = await db.memoryCards.generateCards();
+		const createdGame = await db.memoryGames.createGame(uids, cardPool);
 
 		res.json({ message: "Game created", gameData: createdGame });
 	} catch (error) {
@@ -43,13 +43,36 @@ router.get("/current-games/:uid", async function (req, res) {
 router.get("/continue-game/:gameId", async function (req, res) {
 	const { gameId } = req.params;
 	try {
-		const game = await db.memoryGames.findById(gameId)
+		const game = await db.memoryGames.findById(gameId);
 
 		if (!game) {
 			throw new Error("No game found");
 		}
 
 		res.json({ message: "Game found", gameData: game });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/* ---------------------------------------------------------------- */
+/*                           Restart game                           */
+/* ---------------------------------------------------------------- */
+
+router.put("/restart-game/:gameId", async function (req, res) {
+	const { gameId } = req.params;
+	try {
+		const game = await db.memoryGames.findById(gameId);
+
+		if (!game) {
+			throw new Error("No game found");
+		}
+
+		const cardPool = await db.memoryCards.generateCards();
+		const updatedGame = await db.memoryGames.restartGame(gameId, cardPool);
+
+		res.json({ message: "Game restarted", gameData: updatedGame });
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ error: error.message });

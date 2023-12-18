@@ -22,7 +22,8 @@ const poolSchema = new mongoose.Schema({
 const roundSchema = new mongoose.Schema({
 	playedBy: { type: mongoose.Schema.Types.ObjectId, ref: "users" },
 	nextPlayer: { type: mongoose.Schema.Types.ObjectId, ref: "users" },
-	cardFound: { type: mongoose.Schema.Types.ObjectId, ref: "memory_cards" },
+	cardFound: { type: mongoose.Schema.Types.ObjectId, ref: "memory_cards" } || null,
+	roundNumber: { type: Number },
 	date: { type: Date, default: () => dayjs().toDate() },
 });
 
@@ -54,6 +55,26 @@ gameSchema.statics.createGame = async function (uids, initialPool) {
 			return user._id;
 		});
 		const game = await this.create({ players, initialPool: { cards: [...initialPool] } });
+		return game;
+	} catch (error) {
+		throw error;
+	}
+};
+
+gameSchema.statics.restartGame = async function (gameId, cardPool) {
+	try {
+		const query = { _id: gameId };
+		const update = {
+			$set: {
+				initialPool: { cards: [...cardPool] },
+				roundHistory: [],
+				startedAt: dayjs().toDate(),
+				endedAt: null,
+			},
+		};
+
+		const game = await this.findOneAndUpdate(query, update);
+
 		return game;
 	} catch (error) {
 		throw error;
