@@ -43,13 +43,32 @@ router.get("/current-games/:uid", async function (req, res) {
 router.get("/continue-game/:gameId", async function (req, res) {
 	const { gameId } = req.params;
 	try {
-		const game = await db.memoryGames.findById(gameId);
+		const game = await db.memoryGames.findById(gameId).populate("players");
 
 		if (!game) {
 			throw new Error("No game found");
 		}
 
-		res.json({ message: "Game found", gameData: game });
+		const roundCount = Math.floor(game.roundHistory.length / game.players.length);
+
+		const runningScore = game.scores.map((score) => {
+			const { userId, score: userScore } = score;
+			const uid = game.players.find((player) => String(player._id) === String(userId)).uid;
+
+			return { uid, score: userScore };
+		});
+
+		const foundCards = game.roundHistory
+			.filter((round) => round.cardFound !== null)
+			.map((round) => {
+				if (round.cardFound === null) {
+					return [];
+				}
+				const { cardFound } = round;
+				return cardFound;
+			});
+
+		res.json({ message: "Game found", gameData: game, roundCount, runningScore, foundCards });
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ error: error.message });
@@ -73,6 +92,24 @@ router.put("/restart-game/:gameId", async function (req, res) {
 		const updatedGame = await db.memoryGames.restartGame(gameId, cardPool);
 
 		res.json({ message: "Game restarted", gameData: updatedGame });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/* ---------------------------------------------------------------- */
+/*                          Log progression                         */
+/* ---------------------------------------------------------------- */
+
+router.put("/log-progression/:gameId", async function (req, res) {
+	const { gameId } = req.params;
+	const { uid, flippedCards } = req.body;
+
+	try {
+		const { roundCount, runningScore, foundCards } = await db.memoryGames.logProgression(gameId, uid, flippedCards);
+
+		res.json({ message: "Progression logged", roundCount, runningScore, foundCards });
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ error: error.message });
