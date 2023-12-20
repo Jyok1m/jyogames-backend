@@ -91,7 +91,7 @@ gameSchema.statics.restartGame = async function (gameId, cardPool) {
 
 gameSchema.statics.logProgression = async function (gameId, uid, flippedCards) {
 	try {
-		if (flippedCards.length === 2) {
+		if (flippedCards.length !== 2) {
 			throw new Error("Wrong number of cards flipped");
 		}
 

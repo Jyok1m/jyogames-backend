@@ -8,6 +8,7 @@ var logger = require("morgan");
 
 var indexRouter = require("./routes/index");
 var authRouter = require("./routes/auth.js");
+var libraryGameRouter = require("./routes/library.js");
 var memoryGameRouter = require("./routes/memory.js");
 
 var app = express();
@@ -39,6 +40,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/", indexRouter);
 app.use("/auth", authRouter);
+app.use("/library", libraryGameRouter);
 app.use("/memory", memoryGameRouter);
 
 module.exports = app;
