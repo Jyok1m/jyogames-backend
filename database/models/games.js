@@ -12,7 +12,7 @@ const gameSchema = new mongoose.Schema(
 	{
 		_id: { type: mongoose.Schema.Types.ObjectId },
 		title: { type: String, required: true },
-		category: [{ type: String }],
+		categories: [{ type: String }],
 		description: { type: String, required: true },
 		releaseDate: { type: Date, default: () => dayjs().toDate() },
 		reviews: [reviewSchema] || [],
@@ -22,11 +22,11 @@ const gameSchema = new mongoose.Schema(
 	{ timestamps: true }
 );
 
-gameSchema.statics.addNewGame = async function (title, category, description, releaseDate) {
+gameSchema.statics.addNewGame = async function (title, categories, description, releaseDate) {
 	const gameFound = await this.findOne({ title });
 	if (gameFound) throw new Error("Game already exists");
 
-	const newGame = new this({ _id: new ObjectId(), title, category, description, releaseDate });
+	const newGame = new this({ _id: new ObjectId(), title, categories, description, releaseDate: dayjs(releaseDate).toDate() });
 	const createdGame = await newGame.save();
 
 	return createdGame;

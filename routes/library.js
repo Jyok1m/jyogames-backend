@@ -8,10 +8,10 @@ const db = require("../database/db.js");
 /* ---------------------------------------------------------------- */
 
 router.post("/add-game", async function (req, res) {
-	const { title, category, description, releaseDate } = req.body;
+	const { title, categories, description, releaseDate } = req.body;
 
 	try {
-		const createdGame = await db.gameLibrary.addNewGame(title, category, description, releaseDate);
+		const createdGame = await db.gameLibrary.addNewGame(title, categories, description, releaseDate);
 
 		res.json({ message: "Game added to catalogue", createdGame });
 	} catch (error) {
@@ -39,6 +39,21 @@ router.get("/load-game/:guid", async function (req, res) {
 		}
 
 		res.json({ message: "Game found", gameFound });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/* ---------------------------------------------------------------- */
+/*                        Get library content                       */
+/* ---------------------------------------------------------------- */
+
+router.get("/", async function (req, res) {
+	try {
+		const games = await db.gameLibrary.find();
+
+		res.json({ message: "Games found", games });
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ error: error.message });
