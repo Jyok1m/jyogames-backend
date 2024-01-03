@@ -1,8 +1,8 @@
-const socketIo = require("socket.io");
+const { Server } = require('socket.io');
 const sockets = require("./sockets");
 
 module.exports = (server) => {
-	const io = socketIo(server, {
+	const io = new Server(server, {
 		cors: {
 			origin: function (origin, callback) {
 				const allowedOrigins = [process.env.FRONTEND_URL];
@@ -17,11 +17,12 @@ module.exports = (server) => {
 		},
 	});
 
-	io.on("connection", (socket) => {
-		socket.on("disconnect", () => {
-			null;
+	io.on("connection", async (socket) => {
+		// console.log("Online", { socketId: socket.id })
+		await socket.on("disconnect", () => {
+			// console.log("Offline", { socketId: socket.id})
 		});
-		sockets(io, socket);
+		await sockets(io, socket);
 	});
 
 	return io;
