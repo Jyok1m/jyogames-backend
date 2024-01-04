@@ -5,9 +5,9 @@ const db = require("../database/db");
 const generateRefreshToken = async (userId) => {
   try {
     // Revoke previous refresh tokens
-    const query = { user: new ObjectId(userId), revoked: false };
+    const query = { user: new ObjectId(userId), type: "refresh", revoked: false };
     const update = { $set: { revoked: true } };
-    await db.jwt.updateOne(query, update);
+    await db.jwts.updateOne(query, update);
 
     return jwt.sign(
       { user: userId }, // Payload

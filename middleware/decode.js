@@ -8,25 +8,6 @@ const decode = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader.split(" ")[1];
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   let refreshToken = req.cookies["refresh-token"];
   let accessToken = req.cookies["access-token"];
 
@@ -51,11 +32,11 @@ const decode = async (req, res, next) => {
       const userId = decoded.user;
 
       // Find user token in database
-      const userToken = await db.jwt.findOne({ user: new ObjectId(userId), revoked: false });
+      const userToken = await db.jwts.findOne({ user: new ObjectId(userId), type: "refresh", revoked: false });
 
       // If token is not found, return 403
       if (!userToken) return res.sendStatus(404);
-      const { refreshToken: hashedToken } = userToken;
+      const { token: hashedToken } = userToken;
 
       // If token is found, compare it with the one in the cookie
       const isMatch = await bcrypt.compare(refreshToken, hashedToken);

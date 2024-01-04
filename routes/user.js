@@ -72,15 +72,14 @@ router.post("/sign-in", ...signInRules(), validateRules, checkUser, async functi
     const refreshExpNum = parseInt(refreshExp.slice(0, refreshExp.length - 1));
 
     // Store Refresh Token in DB
-    const newJwt = new db.jwt({
+    await db.jwts.create({
       user: userId,
-      refreshToken: bcrypt.hashSync(refreshToken, 10),
+      token: bcrypt.hashSync(refreshToken, 10),
+      type: "refresh",
       expirationDate: dayjs().add(refreshExpNum, "day").toDate(),
       createdAt: dayjs().toDate(),
       revoked: false,
     });
-
-    await newJwt.save();
 
     // Generate Access Token
     const accessToken = generateAccessToken(userId);
@@ -151,6 +150,7 @@ router.get("/sign-out", authenticate, checkUser, async function (req, res) {
 
 router.post("/forgot-password/:lang", ...forgotPwdRules(), validateRules, checkUser, async function (req, res) {
   try {
+    const { userId } = req;
     const { lang } = req.params;
 
     // Vérif token

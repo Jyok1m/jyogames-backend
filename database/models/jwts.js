@@ -7,7 +7,8 @@ const jwtSchema = new mongoose.Schema(
       ref: "users",
       required: true,
     },
-    refreshToken: { type: String, required: true },
+    token: { type: String, required: true },
+    type: { type: String, required: true }, // "password" or "refresh"
     expirationDate: { type: Date, required: true },
     createdAt: { type: Date, required: true },
     revoked: { type: Boolean, required: true },
