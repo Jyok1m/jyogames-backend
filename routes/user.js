@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../database/db");
+const { ObjectId } = require("mongodb");
 const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
@@ -8,7 +9,7 @@ const handlebars = require("handlebars");
 const { signUpRules, signInRules, forgotPwdRules, validateRules } = require("../middleware/checkFields");
 const { authenticate } = require("../middleware/authenticate");
 const { checkUser } = require("../middleware/checkUser");
-const { generateRefreshToken, generateAccessToken } = require("../modules/jwt");
+const { generateRefreshToken, generateAccessToken, generatePwdResetToken } = require("../modules/jwt");
 const bcrypt = require("bcrypt");
 const uid2 = require("uid2");
 const dayjs = require("dayjs");
@@ -73,7 +74,7 @@ router.post("/sign-in", ...signInRules(), validateRules, checkUser, async functi
 
     // Store Refresh Token in DB
     await db.jwts.create({
-      user: userId,
+      user: new ObjectId(userId),
       token: bcrypt.hashSync(refreshToken, 10),
       type: "refresh",
       expirationDate: dayjs().add(refreshExpNum, "day").toDate(),
@@ -153,25 +154,21 @@ router.post("/forgot-password/:lang", ...forgotPwdRules(), validateRules, checkU
     const { userId } = req;
     const { lang } = req.params;
 
-    // Vérif token
-    const existingResetToken = await db.resetTokens.findOne({
-      user: existingUser._id,
+    // Generate new token
+    const resetToken = await generatePwdResetToken(userId);
+    const hashedToken = await bcrypt.hash(resetToken, 10);
+    const resetExp = process.env.JWT_RESET_EXPIRATION;
+    const resetExpNum = parseInt(resetExp.slice(0, resetExp.length - 1));
+
+    // Store Refresh Token in DB
+    await db.jwts.create({
+      user: new ObjectId(userId),
+      token: hashedToken,
+      type: "password",
+      expirationDate: dayjs().add(resetExpNum, "minutes").toDate(),
+      createdAt: dayjs().toDate(),
+      revoked: false,
     });
-    if (existingResetToken) {
-      await existingResetToken.deleteOne();
-    }
-
-    // Création token
-    const resetToken = uid2(32);
-    const expirationDate = dayjs().add(30, "minutes").toDate();
-
-    const newResetToken = await new db.resetTokens({
-      user: existingUser._id,
-      token: resetToken,
-      expirationDate: expirationDate,
-    });
-
-    await newResetToken.save();
 
     // Envoi mail
     const transporter = nodemailer.createTransport({
@@ -196,10 +193,10 @@ router.post("/forgot-password/:lang", ...forgotPwdRules(), validateRules, checkU
 
     await transporter.sendMail(mailOptions);
 
-    res.status(200).json({ resetToken });
+    res.sendStatus(200);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: error.message });
+    return res.sendStatus(500);
   }
 });
 

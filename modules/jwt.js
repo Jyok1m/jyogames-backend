@@ -37,4 +37,24 @@ const generateAccessToken = (userId) => {
   }
 };
 
-module.exports = { generateRefreshToken, generateAccessToken };
+const generatePwdResetToken = async (userId) => {
+  try {
+    // Revoke previous reset tokens
+    const query = { user: new ObjectId(userId), type: "reset", revoked: false };
+    const update = { $set: { revoked: true } };
+    await db.jwts.updateOne(query, update);
+
+    return jwt.sign(
+      { user: userId }, // Payload
+      process.env.JWT_PASSWORD_SECRET, // Secret key
+      {
+        expiresIn: process.env.JWT_PASSWORD_EXPIRATION, // Expiration time
+      },
+    );
+  } catch (error) {
+    console.error(error);
+    throw new Error(error.message);
+  }
+};
+
+module.exports = { generateRefreshToken, generateAccessToken, generatePwdResetToken };
