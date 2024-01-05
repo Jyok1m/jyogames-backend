@@ -40,7 +40,7 @@ const generateAccessToken = (userId) => {
 const generatePwdResetToken = async (userId) => {
   try {
     // Revoke previous reset tokens
-    const query = { user: new ObjectId(userId), type: "reset", revoked: false };
+    const query = { user: new ObjectId(userId), type: "password", revoked: false };
     const update = { $set: { revoked: true } };
     await db.jwts.updateOne(query, update);
 

@@ -40,16 +40,16 @@ function forgotPwdRules() {
 
 function resetPwdRules() {
   return [
-    // Reset token must be valid
-    body("resetToken")
-      .notEmpty()
-      .withMessage("Reset token is required")
-      .isLength({ min: 32, max: 32 })
-      .withMessage("Invalid reset token format")
-      .escape(),
-
     // Password must be strong
-    body("password").notEmpty().withMessage("Password is required").trim().escape().isLength({ min: 8 }).withMessage,
+    body("password")
+      .notEmpty()
+      .withMessage("Password is required")
+      .trim()
+      .escape()
+      .isLength({ min: 8 })
+      .withMessage("Password must be at least 8 characters long")
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/)
+      .withMessage("Password must include lowercase, uppercase, number, and special character"),
   ];
 }
 
@@ -66,5 +66,6 @@ module.exports = {
   signInRules,
   signUpRules,
   forgotPwdRules,
+  resetPwdRules,
   validateRules,
 };

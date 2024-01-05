@@ -1,61 +1,40 @@
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
 const db = require("../database/db");
 const { ObjectId } = require("mongodb");
 const { generateAccessToken } = require("../modules/jwt");
 
 const authenticate = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  const refreshToken = req.cookies["refresh-token"];
+  const accessToken = req.cookies["access-token"];
+  const authHeader = req.headers["authorization"];
 
-  if (authHeader) {
-    const token = await authHeader.split(" ")[1];
+  const hasCookies = refreshToken || accessToken;
 
-    if (token === "null") return res.sendStatus(401); // User not authenticated
-
-    try {
-      const decodedToken = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-      const userId = decodedToken?.user || null;
-
-      req.userId = userId; // User ID
-      next();
-    } catch (error) {
-      console.error(error);
-      return res.sendStatus(403);
-    }
-  } else {
-    let refreshToken = req.cookies["refresh-token"];
-    let accessToken = req.cookies["access-token"];
-
-    if (!accessToken && !refreshToken) return res.sendStatus(401); // User not authenticated
-
+  if (hasCookies) {
     if (accessToken) {
       try {
         // Decode access token
         const decoded = jwt.verify(accessToken, process.env.JWT_ACCESS_SECRET);
+        const { user: userId } = decoded;
 
         // If access token is valid, continue
-        req.userId = decoded.user; // User ID
+        req.userId = userId; // User ID
         next();
       } catch (error) {
         console.error(error);
         return next();
       }
-    } else if (refreshToken) {
+    } else {
       try {
         // Decode refresh token
         const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-        const userId = decoded.user;
+        const { user: userId } = decoded;
 
         // Find user token in database
-        const userToken = await db.jwts.findOne({ user: new ObjectId(userId), type: "refresh", revoked: false });
+        const userToken = await db.jwts.findOne({ user: new ObjectId(userId), token: refreshToken, revoked: false });
 
-        // If token is not found, return 403
-        if (!userToken) return res.sendStatus(404);
-        const { token: hashedToken } = userToken;
-
-        // If token is found, compare it with the one in the cookie
-        const isMatch = await bcrypt.compare(refreshToken, hashedToken);
-        if (!isMatch) return res.sendStatus(403);
+        // If token is not found, return 404
+        if (!userToken) return res.status(404).json({ error: "Token not found." });
 
         // If tokens match, generate new access token
         const accessToken = generateAccessToken(userId);
@@ -73,11 +52,35 @@ const authenticate = async (req, res, next) => {
         next();
       } catch (error) {
         console.error(error);
-        return res.sendStatus(403);
+        return res.status(403).json({ error: error.message });
       }
-    } else {
-      return res.sendStatus(401); // User not authenticated
     }
+  } else if (authHeader) {
+    const token = authHeader.split(" ")[1];
+    if (token === "null") return res.status(404).json({ error: "User not authenticated." });
+
+    try {
+      let decodedToken;
+      let userId;
+
+      if (req.path !== "/reset-password") {
+        decodedToken = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+      } else {
+        decodedToken = jwt.verify(token, process.env.JWT_PASSWORD_SECRET);
+
+        const resetToken = db.jwts.findOne({ user: new ObjectId(userId), token, revoked: false });
+        if (!resetToken) return res.status(404).json({ error: "Token not found." });
+      }
+
+      req.userId = decodedToken?.user || null;
+
+      next();
+    } catch (error) {
+      console.error(error);
+      return res.status(403).json({ error: error.message });
+    }
+  } else {
+    return res.status(401).json({ error: "User not authenticated." });
   }
 };
 

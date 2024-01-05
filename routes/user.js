@@ -6,14 +6,12 @@ const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
 const handlebars = require("handlebars");
-const { signUpRules, signInRules, forgotPwdRules, validateRules } = require("../middleware/checkFields");
+const { signUpRules, signInRules, forgotPwdRules, resetPwdRules, validateRules } = require("../middleware/checkFields");
 const { authenticate } = require("../middleware/authenticate");
 const { checkUser } = require("../middleware/checkUser");
 const { generateRefreshToken, generateAccessToken, generatePwdResetToken } = require("../modules/jwt");
 const bcrypt = require("bcrypt");
-const uid2 = require("uid2");
 const dayjs = require("dayjs");
-const jwt = require("jsonwebtoken");
 
 /* ---------------------------------------------------------------- */
 /*              Authenticate user upon each path change             */
@@ -21,10 +19,10 @@ const jwt = require("jsonwebtoken");
 
 router.get("/auth", authenticate, async function (req, res) {
   try {
-    res.sendStatus(200);
+    res.json({ message: "User authentificated." });
   } catch (error) {
     console.error(error);
-    return res.sendStatus(500);
+    return res.status(500).error({ error: error.message });
   }
 });
 
@@ -59,7 +57,7 @@ router.post("/sign-up", ...signUpRules(), validateRules, checkUser, async functi
 /* ---------------------------------------------------------------- */
 
 router.post("/sign-in", ...signInRules(), validateRules, checkUser, async function (req, res) {
-  const { userId } = req;
+  const { userId, token } = req;
 
   try {
     // Update User Status
@@ -67,20 +65,26 @@ router.post("/sign-in", ...signInRules(), validateRules, checkUser, async functi
     const update = { $set: { status: "active", lastLogin: dayjs() } };
     await db.users.updateOne(query, update);
 
-    // Generate Refresh Token
-    const refreshToken = await generateRefreshToken(userId);
+    let refreshToken;
     const refreshExp = process.env.JWT_REFRESH_EXPIRATION;
     const refreshExpNum = parseInt(refreshExp.slice(0, refreshExp.length - 1));
 
-    // Store Refresh Token in DB
-    await db.jwts.create({
-      user: new ObjectId(userId),
-      token: bcrypt.hashSync(refreshToken, 10),
-      type: "refresh",
-      expirationDate: dayjs().add(refreshExpNum, "day").toDate(),
-      createdAt: dayjs().toDate(),
-      revoked: false,
-    });
+    if (token) {
+      refreshToken = token;
+    } else {
+      // Generate Refresh Token
+      refreshToken = await generateRefreshToken(userId);
+
+      // Store Refresh Token in DB
+      await db.jwts.create({
+        user: new ObjectId(userId),
+        token: refreshToken,
+        type: "refresh",
+        expirationDate: dayjs().add(refreshExpNum, "day").toDate(),
+        createdAt: dayjs().toDate(),
+        revoked: false,
+      });
+    }
 
     // Generate Access Token
     const accessToken = generateAccessToken(userId);
@@ -104,10 +108,10 @@ router.post("/sign-in", ...signInRules(), validateRules, checkUser, async functi
       maxAge: refreshExpNum * 24 * 60 * 60 * 1000,
     });
 
-    res.sendStatus(200);
+    res.json({ message: "User successfully signed-in" });
   } catch (error) {
     console.error(error);
-    return res.sendStatus(500);
+    return res.status(500).json({ error: error.mesage });
   }
 });
 
@@ -115,7 +119,7 @@ router.post("/sign-in", ...signInRules(), validateRules, checkUser, async functi
 /*                           Sign out user                          */
 /* ---------------------------------------------------------------- */
 
-router.get("/sign-out", authenticate, checkUser, async function (req, res) {
+router.get("/sign-out", authenticate, async function (req, res) {
   const { userId } = req;
 
   try {
@@ -138,7 +142,7 @@ router.get("/sign-out", authenticate, checkUser, async function (req, res) {
       expires: new Date(0),
     });
 
-    res.status(200).json({ message: "User signed out." });
+    res.json({ message: "User successfully signed-out" });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: error.message });
@@ -151,24 +155,27 @@ router.get("/sign-out", authenticate, checkUser, async function (req, res) {
 
 router.post("/forgot-password/:lang", ...forgotPwdRules(), validateRules, checkUser, async function (req, res) {
   try {
-    const { userId } = req;
+    const { userId, email, username } = req;
     const { lang } = req.params;
 
     // Generate new token
     const resetToken = await generatePwdResetToken(userId);
-    const hashedToken = await bcrypt.hash(resetToken, 10);
-    const resetExp = process.env.JWT_RESET_EXPIRATION;
+    const resetExp = process.env.JWT_PASSWORD_EXPIRATION;
     const resetExpNum = parseInt(resetExp.slice(0, resetExp.length - 1));
 
-    // Store Refresh Token in DB
+    // Store reset password Token in DB
     await db.jwts.create({
       user: new ObjectId(userId),
-      token: hashedToken,
+      token: resetToken,
       type: "password",
       expirationDate: dayjs().add(resetExpNum, "minutes").toDate(),
       createdAt: dayjs().toDate(),
       revoked: false,
     });
+
+    // Revoke current refresh token
+    await db.jwts.updateOne({ user: new ObjectId(userId), type: "refresh", revoked: false }, { $set: { revoked: true } });
+    await db.users.updateOne({ _id: new ObjectId(userId) }, { status: "inactive" });
 
     // Envoi mail
     const transporter = nodemailer.createTransport({
@@ -186,17 +193,34 @@ router.post("/forgot-password/:lang", ...forgotPwdRules(), validateRules, checkU
 
     const mailOptions = {
       from: process.env.NODEMAILER_EMAIL,
-      to: existingUser.email,
+      to: email,
       subject: lang === "en" ? "Resetting your Jyogames password" : "Réinitialisation de votre mot de passe Jyogames",
-      html: template({ username: existingUser.username, resetLink }),
+      html: template({ username, resetLink }),
     };
 
     await transporter.sendMail(mailOptions);
 
-    res.sendStatus(200);
+    res.cookie("refresh-token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      expires: new Date(0),
+    });
+
+    res.cookie("access-token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      expires: new Date(0),
+    });
+
+    res.cookie("connected", "", {
+      secure: process.env.NODE_ENV === "production",
+      expires: new Date(0),
+    });
+
+    res.json({ message: "Reset instructions have been sent to your email" });
   } catch (error) {
     console.error(error);
-    return res.sendStatus(500);
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -204,75 +228,30 @@ router.post("/forgot-password/:lang", ...forgotPwdRules(), validateRules, checkU
 /*                          Reset password                          */
 /* ---------------------------------------------------------------- */
 
-/*
-router.patch(
-  "/reset-password",
-  body("resetToken").if(body("email").notEmpty()).isLength({ min: 32, max: 32 }).escape(),
-  body("token").if(body("username").notEmpty()).isLength({ min: 32, max: 32 }).escape(),
-  oneOf([body("resetToken").notEmpty(), body("token").notEmpty()]),
-  body("password")
-    .notEmpty()
-    .trim()
-    .escape()
-    .isLength({ min: 8 })
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/),
-  async function (req, res) {
-    if (!validationResult(req).isEmpty()) {
-      console.error({ errors: validationResult(req).array() });
-      return res.status(400).json({ error: "Invalid Token or token." });
+router.patch("/reset-password", ...resetPwdRules(), validateRules, authenticate, async function (req, res) {
+  try {
+    const { password: newPassword } = req.body;
+    const { userId } = req;
+
+    const user = await db.users.findById(userId).select("password");
+    const { password: hashedPassword } = user;
+
+    const pwdMatch = await bcrypt.compare(newPassword, hashedPassword);
+
+    if (pwdMatch) {
+      return res.status(401).json({ error: "Passwords must be different" });
+    } else {
+      const newHash = await bcrypt.hash(newPassword, 10);
+
+      await user.updateOne({ $set: { password: newHash } });
+      await db.jwts.updateOne({ user: new ObjectId(userId), type: "password", revoked: false }, { $set: { revoked: true } });
     }
 
-    try {
-      const { token, resetToken, password } = req.body;
-      let existingUser;
-
-      if (token) {
-        // Vérif user
-        existingUser = await db.users.findOne({ token });
-      } else if (resetToken) {
-        // Vérif token
-        const existingResetToken = await db.resetTokens.findOne({ token: resetToken }).populate("user");
-        if (!existingResetToken) {
-          return res.status(404).json({ error: "Token not found." });
-        }
-
-        // Vérif token expiration
-        if (dayjs().isAfter(existingResetToken.expirationDate)) {
-          return res.status(401).json({ error: "Token expired." });
-        }
-
-        existingUser = existingResetToken.user;
-      }
-
-      if (!existingUser) {
-        return res.status(404).json({ error: "User not found." });
-      }
-
-      // Vérif password
-      const isPasswordSame = await bcrypt.compare(password, existingUser.password);
-      if (isPasswordSame) {
-        return res.status(401).json({ error: "Passwords must be different." });
-      }
-
-      // Reset password
-      const salt = await bcrypt.genSalt(10);
-      const hash = await bcrypt.hash(password, salt);
-
-      await db.users.updateOne({ _id: existingUser._id }, { password: hash, token: uid2(32) });
-
-      // Delete reset token
-      if (resetToken) {
-        await db.resetTokens.deleteOne({ token: resetToken });
-      }
-
-      res.status(200).json({ message: "Password reset successfully." });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: error.message });
-    }
-  },
-);
-
- */
+    res.json({ message: "Password successfully reset" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;

@@ -28,6 +28,14 @@ const checkUser = async (req, res, next) => {
 
     const user = await db.users.findOne(query);
 
+    if (!user) {
+      if (req.path === "/sign-up") {
+        return next();
+      } else {
+        return res.status(404).json({ error: "User not found." });
+      }
+    }
+
     const { email: userEmail, username: userUsername, _id: userId, password: userPassword, status } = user;
 
     switch (req.path) {
@@ -36,21 +44,24 @@ const checkUser = async (req, res, next) => {
         if (userUsername === username) return res.status(409).json({ error: "Username already exists" });
         break;
       case "/sign-in":
-        if (!user) return res.status(404).json({ error: "User not found." });
+        // Check if passwords match
         const passwordsMatch = await bcrypt.compare(password, userPassword);
         if (!passwordsMatch) return res.status(401).json({ error: "Incorrect password." }); // User not authenticated
+
+        // Check if a refreshToken already exists
+        const refreshToken = await db.jwts.findOne({ user: userId, type: "refresh", revoked: false });
+        if (refreshToken) req.token = refreshToken.token;
+
         break;
       case "/sign-out":
-        if (!user) return res.status(404).json({ error: "User not found." });
         if (status === "inactive") return res.status(401).json({ error: "User already signed out." });
-        break;
-      case "/forgot-password":
-        if (!user) return res.status(404).json({ error: "User not found." });
         break;
       default:
         break;
     }
 
+    req.username = userUsername;
+    req.email = userEmail;
     req.userId = userId;
     next();
   } catch (error) {
